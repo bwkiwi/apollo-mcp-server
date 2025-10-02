@@ -1,15 +1,22 @@
+use std::sync::Arc;
+
 use apollo_compiler::{Schema, validation::Valid};
 use apollo_federation::{ApiSchemaOptions, Supergraph};
 use apollo_mcp_registry::uplink::schema::{SchemaState, event::Event as SchemaEvent};
 use futures::{FutureExt as _, Stream, StreamExt as _, stream};
+use itops_ai_auth::Auth0TokenProvider;
 use reqwest::header::HeaderMap;
+use tokio::sync::Mutex;
 use url::Url;
 
 use crate::{
+    auth::{SessionManager, DeviceFlowManager},
     custom_scalar_map::CustomScalarMap,
     errors::{OperationError, ServerError},
     health::HealthCheckConfig,
     operations::MutationMode,
+    schema_loader::SchemaCache,
+    test_manager::TestManagerTools,
 };
 
 use super::{Server, ServerEvent, Transport};
@@ -33,6 +40,16 @@ struct Config {
     transport: Transport,
     endpoint: Url,
     headers: HeaderMap,
+    // Phase 1 Auth0 (backward compatibility)
+    auth0_token_provider: Option<Arc<Mutex<Auth0TokenProvider>>>,
+    // Phase 2 Auth0 (per-session authentication)
+    session_manager: Option<Arc<SessionManager>>,
+    device_flow_manager: Option<Arc<DeviceFlowManager>>,
+    // Role-based routing
+    schema_cache: Option<Arc<SchemaCache>>,
+    role_config: Option<super::RoleConfig>,
+    // Test manager integration
+    test_manager: Option<Arc<TestManagerTools>>,
     execute_introspection: bool,
     validate_introspection: bool,
     introspect_introspection: bool,
@@ -65,6 +82,12 @@ impl StateMachine {
                 transport: server.transport,
                 endpoint: server.endpoint,
                 headers: server.headers,
+                auth0_token_provider: server.auth0_token_provider,
+                session_manager: server.session_manager,
+                device_flow_manager: server.device_flow_manager,
+                schema_cache: server.schema_cache,
+                role_config: server.role_config,
+                test_manager: server.test_manager,
                 execute_introspection: server.execute_introspection,
                 validate_introspection: server.validate_introspection,
                 introspect_introspection: server.introspect_introspection,

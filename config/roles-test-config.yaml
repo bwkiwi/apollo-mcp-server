@@ -1,0 +1,104 @@
+# Apollo MCP Server - Role-Based Multi-Schema Test Configuration
+# Version: 0.7.1-itops-auth0-roles
+
+# Standard GraphQL endpoint (fallback when roles not specified)
+endpoint: "https://api.it-ops.ai/graphql"
+
+# ============================================================================
+# ROLE-BASED ROUTING CONFIGURATION
+# ============================================================================
+# Enables multi-schema support with path-based role routing
+# Client requests: /mcp/{role} → Backend: /graphql/{role}
+roles:
+  # Base URL for GraphQL backend
+  graphql_base_url: "https://api.it-ops.ai"
+
+  # Available roles - schemas will be fetched for each role on startup
+  available_roles:
+    - reader      # Read-only access
+    - creator     # Can create resources
+    - approver    # Can approve changes
+    - admin       # Full administrative access
+
+  # Default role used when client requests /mcp without specifying a role
+  default_role: reader
+
+# ============================================================================
+# AUTH0 PHASE 2 CONFIGURATION (Per-Session Authentication)
+# ============================================================================
+auth0:
+  domain: "${AUTH0_DOMAIN}"
+  client_id: "${AUTH0_CLIENT_ID}"
+  audience: "${AUTH0_AUDIENCE}"
+
+  per_session_auth:
+    enabled: true
+    device_flow_client_id: "${AUTH0_DEVICE_FLOW_CLIENT_ID}"
+    session_storage: memory
+    token_refresh_buffer_seconds: 300
+    device_flow_poll_interval_seconds: 5
+
+# ============================================================================
+# TRANSPORT CONFIGURATION
+# ============================================================================
+transport:
+  type: streamable_http
+  address: 0.0.0.0
+  port: 5000
+
+# ============================================================================
+# SCHEMA SOURCE
+# ============================================================================
+# Note: Role-based schemas are fetched from GraphQL backend
+# This is only used as fallback for non-role requests
+schema:
+  source: local
+  path: /config/default-schema.graphql
+
+# ============================================================================
+# OPERATIONS SOURCE
+# ============================================================================
+operations:
+  source: introspect
+
+# ============================================================================
+# HEALTH CHECK
+# ============================================================================
+health_check:
+  enabled: true
+  path: /health
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+logging:
+  level: info
+  format: json
+  output:
+    - stdout
+
+# ============================================================================
+# INTROSPECTION TOOLS
+# ============================================================================
+introspection:
+  execute:
+    enabled: true
+  validate:
+    enabled: true
+  introspect:
+    enabled: true
+    minify: false
+  search:
+    enabled: true
+    minify: false
+    leaf_depth: 3
+    index_memory_bytes: 10485760  # 10 MB
+
+# ============================================================================
+# SERVER OVERRIDES
+# ============================================================================
+overrides:
+  mutation_mode: all
+  disable_type_description: false
+  disable_schema_description: false
+  enable_explorer: false

@@ -1,0 +1,96 @@
+# Apollo MCP Server Configuration for Phase 2 Auth0
+# This configuration enables both authentication and GraphQL services in one container
+
+transport:
+  type: streamable_http
+  address: "0.0.0.0"
+  port: 5000
+  # Optional: Enable authentication for the MCP server endpoint itself
+  # auth:
+  #   servers: ["https://your-auth-provider.com"]
+  #   audiences: ["apollo-mcp-server"]
+  #   resource: "https://your-server.com:5000"
+
+# Your GraphQL API endpoint
+endpoint: "https://your-graphql-api.example.com/graphql"
+
+# Schema source - choose one:
+schema:
+  # Option 1: Use Apollo Studio uplink
+  uplink: {}
+  # Option 2: Use local schema file
+  # local:
+  #   path: "/config/schema.graphql"
+
+# Operations source - choose one:
+operations:
+  # Option 1: Use introspection (generates operations from schema)
+  introspect: {}
+  # Option 2: Use Apollo Studio collection
+  # collection:
+  #   id: default  # or specific collection ID
+  # Option 3: Use local operation files
+  # local:
+  #   paths: ["/config/operations"]
+
+# GraphOS configuration (required if using uplink or studio collections)
+graphos:
+  api_key: "your-apollo-studio-api-key"
+  graph_ref: "your-graph@current"
+
+# Auth0 Phase 2 Configuration - Provides per-session authentication
+auth0:
+  # Your Auth0 domain
+  domain: "your-tenant.auth0.com"
+  
+  # Auth0 client ID (can be same as device_flow_client_id)
+  client_id: "your-auth0-client-id"
+  
+  # GraphQL API audience
+  audience: "https://your-graphql-api.example.com"
+  
+  # Phase 2 per-session authentication
+  per_session_auth:
+    enabled: true
+    
+    # Auth0 Native Application client ID for device flow
+    device_flow_client_id: "your-device-flow-client-id"
+    
+    # Session storage (persistent across container restarts)
+    session_storage:
+      type: file
+      path: "/data/sessions.json"
+    
+    # Token refresh 5 minutes before expiry
+    token_refresh_buffer_seconds: 300
+    
+    # Poll Auth0 every 5 seconds during device flow
+    device_flow_poll_interval_seconds: 5
+    
+    # Device flow expires after 10 minutes
+    device_flow_timeout_seconds: 600
+
+# Enable introspection tools
+introspection:
+  execute:
+    enabled: true
+  introspect:
+    enabled: true
+  search:
+    enabled: true
+  validate:
+    enabled: true
+
+# Health check endpoint
+health_check:
+  enabled: true
+  path: "/health"
+
+# Optional: Custom headers for GraphQL requests
+headers:
+  User-Agent: "Apollo-MCP-Server/1.0"
+  # Add any other default headers your GraphQL API needs
+
+# Optional: Enable explorer tool for Apollo Studio
+overrides:
+  enable_explorer: true

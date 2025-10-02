@@ -1,21 +1,28 @@
 use std::net::{IpAddr, Ipv4Addr};
+use std::sync::Arc;
 
 use apollo_mcp_registry::uplink::schema::SchemaSource;
 use bon::bon;
+use itops_ai_auth::Auth0TokenProvider;
 use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 use schemars::JsonSchema;
 use serde::Deserialize;
+use tokio::sync::Mutex;
 use url::Url;
 
-use crate::auth;
+use crate::auth::{self, SessionManager, DeviceFlowManager};
 use crate::custom_scalar_map::CustomScalarMap;
 use crate::errors::ServerError;
 use crate::event::Event as ServerEvent;
 use crate::health::HealthCheckConfig;
 use crate::operations::{MutationMode, OperationSource};
+use crate::schema_loader::SchemaCache;
+use crate::test_manager::TestManagerTools;
 
+mod role_config;
 mod states;
 
+pub use role_config::RoleConfig;
 use states::StateMachine;
 
 /// An Apollo MCP Server
@@ -25,6 +32,16 @@ pub struct Server {
     operation_source: OperationSource,
     endpoint: Url,
     headers: HeaderMap,
+    // Phase 1 Auth0 (backward compatibility)
+    auth0_token_provider: Option<Arc<Mutex<Auth0TokenProvider>>>,
+    // Phase 2 Auth0 (per-session authentication)
+    session_manager: Option<Arc<SessionManager>>,
+    device_flow_manager: Option<Arc<DeviceFlowManager>>,
+    // Role-based routing
+    schema_cache: Option<Arc<SchemaCache>>,
+    role_config: Option<RoleConfig>,
+    // Test manager integration
+    test_manager: Option<Arc<TestManagerTools>>,
     execute_introspection: bool,
     validate_introspection: bool,
     introspect_introspection: bool,
@@ -101,6 +118,12 @@ impl Server {
         operation_source: OperationSource,
         endpoint: Url,
         headers: HeaderMap,
+        auth0_token_provider: Option<Arc<Mutex<Auth0TokenProvider>>>,
+        session_manager: Option<Arc<SessionManager>>,
+        device_flow_manager: Option<Arc<DeviceFlowManager>>,
+        schema_cache: Option<Arc<SchemaCache>>,
+        role_config: Option<RoleConfig>,
+        test_manager: Option<Arc<TestManagerTools>>,
         execute_introspection: bool,
         validate_introspection: bool,
         introspect_introspection: bool,
@@ -127,6 +150,12 @@ impl Server {
             operation_source,
             endpoint,
             headers,
+            auth0_token_provider,
+            session_manager,
+            device_flow_manager,
+            schema_cache,
+            role_config,
+            test_manager,
             execute_introspection,
             validate_introspection,
             introspect_introspection,

@@ -14,6 +14,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{Instrument as _, debug, error, info, trace};
 
 use crate::{
+    auth::{LoginTool, WhoAmITool, LogoutTool, GetGraphQLTokenTool},
     errors::ServerError,
     explorer::Explorer,
     health::HealthCheck,
@@ -117,6 +118,19 @@ impl Starting {
 
         let explorer_tool = self.config.explorer_graph_ref.map(Explorer::new);
 
+        // Create Phase 2 Auth0 authentication tools if enabled
+        let (login_tool, whoami_tool, logout_tool, get_graphql_token_tool) = if let (Some(session_manager), Some(device_flow_manager)) = 
+            (&self.config.session_manager, &self.config.device_flow_manager) {
+            (
+                Some(LoginTool::new(device_flow_manager.clone(), session_manager.clone())),
+                Some(WhoAmITool::new(session_manager.clone())),
+                Some(LogoutTool::new(session_manager.clone())),
+                Some(GetGraphQLTokenTool::new(session_manager.clone())),
+            )
+        } else {
+            (None, None, None, None)
+        };
+
         let cancellation_token = CancellationToken::new();
 
         // Create health check if enabled (only for StreamableHttp transport)
@@ -137,6 +151,16 @@ impl Starting {
             operations: Arc::new(Mutex::new(operations)),
             headers: self.config.headers,
             endpoint: self.config.endpoint,
+            auth0_token_provider: self.config.auth0_token_provider,
+            session_manager: self.config.session_manager,
+            device_flow_manager: self.config.device_flow_manager,
+            schema_cache: self.config.schema_cache,
+            role_config: self.config.role_config,
+            test_manager: self.config.test_manager,
+            login_tool,
+            whoami_tool,
+            logout_tool,
+            get_graphql_token_tool,
             execute_tool,
             introspect_tool,
             search_tool,

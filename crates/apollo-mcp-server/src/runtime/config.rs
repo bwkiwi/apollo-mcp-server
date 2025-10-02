@@ -7,9 +7,48 @@ use serde::Deserialize;
 use url::Url;
 
 use super::{
-    OperationSource, SchemaSource, endpoint::Endpoint, graphos::GraphOSConfig,
+    Auth0Config, OperationSource, SchemaSource, endpoint::Endpoint, graphos::GraphOSConfig,
     introspection::Introspection, logging::Logging, overrides::Overrides,
 };
+
+/// Configuration for test manager integration
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct TestManagerConfig {
+    /// Enable test manager features
+    pub enabled: bool,
+
+    /// Base URL for the IT-Ops backend API (e.g., "http://localhost:5000")
+    /// If not provided, will be derived from the GraphQL endpoint
+    pub backend_url: Option<String>,
+
+    /// Additional MCP description text (fallback if backend is unavailable)
+    pub fallback_description: Option<String>,
+
+    /// Timeout for backend API calls in milliseconds
+    #[serde(default = "TestManagerConfig::default_timeout")]
+    pub timeout_ms: u64,
+}
+
+impl Default for TestManagerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            backend_url: None,
+            fallback_description: None,
+            timeout_ms: Self::default_timeout(),
+        }
+    }
+}
+
+impl TestManagerConfig {
+    fn default_timeout() -> u64 {
+        5000 // 5 seconds
+    }
+}
+
+// Re-export RoleConfig from the server module (it's defined there for library access)
+pub use apollo_mcp_server::server::RoleConfig;
 
 /// Configuration for the MCP server
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -24,6 +63,9 @@ pub struct Config {
 
     /// Apollo-specific credential overrides
     pub graphos: GraphOSConfig,
+
+    /// Auth0 configuration for outbound GraphQL authentication
+    pub auth0: Option<Auth0Config>,
 
     /// List of hard-coded headers to include in all GraphQL requests
     #[serde(deserialize_with = "parsers::map_from_str")]
@@ -51,6 +93,12 @@ pub struct Config {
 
     /// The type of server transport to use
     pub transport: Transport,
+
+    /// Role-based routing configuration for multi-schema support
+    pub roles: Option<RoleConfig>,
+
+    /// Test manager configuration
+    pub test_manager: TestManagerConfig,
 }
 
 mod parsers {

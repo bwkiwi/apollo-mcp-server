@@ -17,12 +17,22 @@ use serde::Deserialize;
 use tower_http::cors::{Any, CorsLayer};
 use url::Url;
 
+pub mod auth_tools;
+pub mod config;
+pub mod device_flow;
 mod networked_token_validator;
 mod protected_resource;
+pub mod secure_logging;
+pub mod session_manager;
 mod valid_token;
 mod www_authenticate;
 
+pub use auth_tools::{LoginTool, WhoAmITool, LogoutTool, GetGraphQLTokenTool};
+pub use config::{Auth0Config, PerSessionAuthConfig, SessionStorageType};
+pub use device_flow::{DeviceFlowManager, DeviceFlowError, DeviceCodeResponse, DeviceFlowStatus};
+pub use secure_logging::{truncate_sensitive, sensitive, SensitiveString};
 use protected_resource::ProtectedResource;
+pub use session_manager::{SessionManager, SessionStorage, MemorySessionStorage, SessionManagerError, UserInfo};
 pub(crate) use valid_token::ValidToken;
 use valid_token::ValidateToken;
 use www_authenticate::WwwAuthenticate;

@@ -204,8 +204,10 @@ dependencies = [
  "apollo-federation",
  "apollo-mcp-registry",
  "apollo-schema-index",
+ "async-trait",
  "axum",
  "axum-extra",
+ "base64",
  "bon",
  "chrono",
  "clap",
@@ -215,6 +217,7 @@ dependencies = [
  "http",
  "humantime-serde",
  "insta",
+ "itops-ai-auth",
  "jsonwebtoken",
  "jwks",
  "lz-str",
@@ -1718,6 +1721,17 @@ name = "itoa"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
+
+[[package]]
+name = "itops-ai-auth"
+version = "0.7.1"
+dependencies = [
+ "anyhow",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "jobserver"

@@ -15,6 +15,8 @@ items:
     href: "./guides"
   - label: "Authorization"
     href: "./guides/auth"
+  - label: "Auth0 Extension"
+    href: "./guides/auth0-extension"
   - label: "Command Reference"
     href: "./command-reference"
   - label: "Best Practices"

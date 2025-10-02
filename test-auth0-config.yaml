@@ -1,0 +1,26 @@
+endpoint: https://example.com/graphql
+
+auth0:
+  domain: your-tenant.auth0.com
+  client_id: your_client_id
+  audience: https://api.example.com/graphql
+  refresh_token: your_refresh_token
+
+schema:
+  type: uplink
+
+operations:
+  type: introspect
+
+introspection:
+  execute:
+    enabled: true
+  introspect:
+    enabled: true
+  search:
+    enabled: true
+  validate:
+    enabled: true
+
+transport:
+  type: stdio

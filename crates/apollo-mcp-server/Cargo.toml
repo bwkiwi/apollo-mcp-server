@@ -9,12 +9,16 @@ default-run = "apollo-mcp-server"
 [dependencies]
 anyhow = "1.0.98"
 apollo-compiler.workspace = true
+async-trait = "0.1.85"
 apollo-federation.workspace = true
+base64 = "0.22.1"
 apollo-mcp-registry = { path = "../apollo-mcp-registry" }
 apollo-schema-index = { path = "../apollo-schema-index" }
+itops-ai-auth = { path = "../itops-ai-auth" }
 axum = "0.8.4"
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 bon = "3.6.3"
+chrono = { version = "0.4.41", default-features = false, features = ["now", "serde"] }
 clap = { version = "4.5.36", features = ["derive", "env"] }
 figment = { version = "0.10.19", features = ["env", "yaml"] }
 futures.workspace = true

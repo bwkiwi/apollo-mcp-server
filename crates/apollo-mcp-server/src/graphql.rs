@@ -1,15 +1,22 @@
 //! Execute GraphQL operations from an MCP tool
 
+use std::sync::Arc;
+
 use crate::errors::McpError;
-use reqwest::header::{HeaderMap, HeaderValue};
+use crate::auth::sensitive;
+use itops_ai_auth::Auth0TokenProvider;
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use rmcp::model::{CallToolResult, Content, ErrorCode};
 use serde_json::{Map, Value};
+use tokio::sync::Mutex;
+use tracing::{debug, error};
 use url::Url;
 
 pub struct Request<'a> {
     pub input: Value,
     pub endpoint: &'a Url,
     pub headers: HeaderMap,
+    pub auth0_token_provider: Option<&'a Arc<Mutex<Auth0TokenProvider>>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -34,6 +41,30 @@ pub trait Executable {
 
     /// Execute as a GraphQL operation using the endpoint and headers
     async fn execute(&self, request: Request<'_>) -> Result<CallToolResult, McpError> {
+        // Prepare headers, including Auth0 token if configured
+        let mut headers = self.headers(&request.headers);
+        
+        // Add Auth0 token if token provider is available
+        if let Some(token_provider) = request.auth0_token_provider {
+            match token_provider.lock().await.get_bearer().await {
+                Ok(bearer_token) => {
+                    debug!("Adding Auth0 bearer token to GraphQL request: {}", sensitive(&bearer_token));
+                    if let Ok(header_value) = HeaderValue::from_str(&bearer_token) {
+                        headers.insert(AUTHORIZATION, header_value);
+                    } else {
+                        error!("Failed to create header value from Auth0 bearer token");
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to get Auth0 bearer token: {}", e);
+                    return Err(McpError::new(
+                        ErrorCode::INTERNAL_ERROR,
+                        format!("Auth0 authentication failed: {}", e),
+                        None,
+                    ));
+                }
+            }
+        }
         let client_metadata = serde_json::json!({
             "name": "mcp",
             "version": std::env!("CARGO_PKG_VERSION")
@@ -76,7 +107,7 @@ pub trait Executable {
 
         reqwest::Client::new()
             .post(request.endpoint.as_str())
-            .headers(self.headers(&request.headers))
+            .headers(headers)
             .body(Value::Object(request_body).to_string())
             .send()
             .await

@@ -3,6 +3,7 @@
 //! This module is only used by the main binary and provides helper code
 //! related to runtime configuration.
 
+mod auth0;
 mod config;
 mod endpoint;
 mod graphos;
@@ -15,7 +16,8 @@ mod schemas;
 
 use std::path::Path;
 
-pub use config::Config;
+pub use auth0::Auth0Config;
+pub use config::{Config, TestManagerConfig};
 use figment::{
     Figment,
     providers::{Env, Format, Yaml},
@@ -38,11 +40,24 @@ pub fn read_config_from_env() -> Result<Config, figment::Error> {
 /// Read in a config from a YAML file, filling in any missing values from the environment
 #[allow(clippy::result_large_err)]
 pub fn read_config(yaml_path: impl AsRef<Path>) -> Result<Config, figment::Error> {
-    Figment::new()
+    let yaml_path = yaml_path.as_ref();
+    
+    // Debug: Log the raw YAML content
+    if let Ok(content) = std::fs::read_to_string(yaml_path) {
+        tracing::debug!("Raw YAML config content from {}:\n{}", yaml_path.display(), content);
+    }
+    
+    let figment = Figment::new()
         .join(apollo_common_env())
         .join(Env::prefixed("APOLLO_MCP_").split(ENV_NESTED_SEPARATOR))
-        .join(Yaml::file(yaml_path))
-        .extract()
+        .join(Yaml::file(yaml_path));
+    
+    // Debug: Log the merged configuration
+    if let Ok(value) = figment.extract_inner::<figment::value::Value>("") {
+        tracing::debug!("Merged configuration: {:?}", value);
+    }
+    
+    figment.extract()
 }
 
 /// Figment provider that handles mapping common Apollo environment variables into
