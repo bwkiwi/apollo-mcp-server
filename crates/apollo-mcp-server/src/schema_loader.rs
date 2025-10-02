@@ -93,9 +93,12 @@ impl Default for SchemaCache {
 
 /// Fetch a GraphQL schema from an endpoint using introspection
 async fn fetch_schema_from_graphql(endpoint: &str) -> Result<Valid<Schema>, SchemaLoadError> {
-    debug!("Executing introspection query against {}", endpoint);
+    info!("🔍 Executing introspection query against {}", endpoint);
 
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(10))  // 10 second timeout
+        .build()
+        .map_err(|e| SchemaLoadError::FetchError(e))?;
 
     // Use the standard introspection query
     let introspection_query = r#"
@@ -195,11 +198,18 @@ async fn fetch_schema_from_graphql(endpoint: &str) -> Result<Valid<Schema>, Sche
         "query": introspection_query,
     });
 
+    info!("📡 Sending introspection request to {}", endpoint);
     let response = client
         .post(endpoint)
         .json(&request_body)
         .send()
-        .await?;
+        .await
+        .map_err(|e| {
+            warn!("❌ Failed to send request to {}: {}", endpoint, e);
+            SchemaLoadError::FetchError(e)
+        })?;
+
+    info!("📥 Received response from {} with status {}", endpoint, response.status());
 
     if !response.status().is_success() {
         return Err(SchemaLoadError::GraphQLError(format!(

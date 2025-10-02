@@ -300,20 +300,22 @@ async fn main() -> anyhow::Result<()> {
         );
 
         // Attempt feature detection
+        info!("  🔍 Detecting Test Manager backend at {}...", backend_url);
         if tools.detect_features().await {
-            info!("  Test Manager backend detected and ready");
+            info!("  ✅ Test Manager backend detected and ready");
 
             // Try to load MCP description
+            info!("  📥 Loading MCP description from backend...");
             let description = tools.get_mcp_description().await;
             if !description.is_empty() {
-                info!("  Retrieved MCP description from backend ({} chars)", description.len());
+                info!("  ✅ Retrieved MCP description from backend ({} chars)", description.len());
             } else if config.test_manager.fallback_description.is_some() {
-                info!("  Using fallback MCP description from config");
+                info!("  ⚠️  Using fallback MCP description from config");
             }
 
             Some(Arc::new(tools))
         } else {
-            warn!("  Test Manager backend not available at {}", backend_url);
+            warn!("  ❌ Test Manager backend not available at {}", backend_url);
             if config.test_manager.fallback_description.is_some() {
                 warn!("  Continuing with fallback MCP description from config");
                 Some(Arc::new(tools))
@@ -330,11 +332,12 @@ async fn main() -> anyhow::Result<()> {
     // Load role-based schemas if configured
     let (schema_cache, role_config) = match &config.roles {
         Some(roles_config) => {
-            info!("Loading role-based schemas from GraphQL backend");
-            info!("  Base URL: {}", roles_config.graphql_base_url);
-            info!("  Available roles: {:?}", roles_config.available_roles);
-            info!("  Default role: {}", roles_config.default_role);
+            info!("🔄 Loading role-based schemas from GraphQL backend");
+            info!("  📍 Base URL: {}", roles_config.graphql_base_url);
+            info!("  👥 Available roles: {:?}", roles_config.available_roles);
+            info!("  🏷️  Default role: {}", roles_config.default_role);
 
+            info!("  ⏳ Fetching schemas for {} roles (this may take a moment)...", roles_config.available_roles.len());
             match SchemaCache::load_from_backend(
                 &roles_config.graphql_base_url,
                 &roles_config.available_roles,
@@ -342,7 +345,7 @@ async fn main() -> anyhow::Result<()> {
             .await
             {
                 Ok(cache) => {
-                    info!("Successfully loaded schemas for {} roles", roles_config.available_roles.len());
+                    info!("  ✅ Successfully loaded schemas for {} roles", roles_config.available_roles.len());
                     for role in &roles_config.available_roles {
                         if cache.has_role(role) {
                             info!("  ✓ Schema loaded for role: {}", role);
