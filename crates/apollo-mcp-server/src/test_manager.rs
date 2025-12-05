@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use reqwest::Client;
 use rmcp::model::Tool;
-use schemars::JsonSchema;
+use rmcp::schemars::JsonSchema;
+use rmcp::{schemars, serde_json};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::{debug, warn};

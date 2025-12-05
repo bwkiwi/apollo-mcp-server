@@ -13,4 +13,7 @@ pub enum SchemaSource {
     /// Fetch the schema from uplink
     #[default]
     Uplink,
+
+    /// Fetch the schema from GraphQL endpoint via introspection
+    Introspection,
 }

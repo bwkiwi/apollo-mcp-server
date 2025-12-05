@@ -20,9 +20,17 @@ RUN cargo build --release --bin apollo-mcp-server
 # Runtime stage
 FROM debian:bookworm-slim
 
-# Install runtime dependencies
+# Install runtime dependencies and debugging tools
+# TODO: Remove debugging tools for production release
 RUN apt-get update && apt-get install -y \
     ca-certificates \
+    curl \
+    wget \
+    netcat-traditional \
+    net-tools \
+    procps \
+    lsof \
+    telnet \
     && rm -rf /var/lib/apt/lists/*
 
 # Create user for security

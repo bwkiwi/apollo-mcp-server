@@ -11,7 +11,7 @@ use rmcp::{
 use serde_json::json;
 use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
-use tracing::{Instrument as _, debug, error, info, trace};
+use tracing::{Instrument as _, debug, error, info, trace, warn};
 
 use crate::{
     auth::{LoginTool, WhoAmITool, LogoutTool, GetGraphQLTokenTool},
@@ -142,7 +142,12 @@ impl Starting {
                     port: _,
                 },
                 true,
-            ) => Some(HealthCheck::new(self.config.health_check.clone())),
+            ) => {
+                let mut health_config = self.config.health_check.clone();
+                // Set GraphQL endpoint for backend connectivity check
+                health_config.graphql_endpoint = Some(self.config.endpoint.to_string());
+                Some(HealthCheck::new(health_config))
+            },
             _ => None, // No health check for SSE, Stdio, or when disabled
         };
 
@@ -193,15 +198,22 @@ impl Starting {
                 port,
             } => {
                 info!(port = ?port, address = ?address, "Starting MCP server in Streamable HTTP mode");
-                let running = running.clone();
+                let running_for_service = running.clone();
+                let running_for_debug = running.clone();
                 let listen_address = SocketAddr::new(address, port);
                 let service = StreamableHttpService::new(
-                    move || Ok(running.clone()),
+                    move || Ok(running_for_service.clone()),
                     LocalSessionManager::default().into(),
                     Default::default(),
                 );
                 let mut router =
                     with_auth!(axum::Router::new().nest_service("/mcp", service), auth);
+
+                // Add debug endpoint to show internal state
+                let debug_router = Router::new()
+                    .route("/debug", get(debug_endpoint))
+                    .with_state(running_for_debug);
+                router = router.merge(debug_router);
 
                 // Add health check endpoint if configured
                 if let Some(health_check) = health_check.filter(|h| h.config().enabled) {
@@ -211,8 +223,12 @@ impl Starting {
                     router = router.merge(health_router);
                 }
 
+                info!("🔌 Attempting to bind TCP listener on {}:{}", address, port);
                 let tcp_listener = tokio::net::TcpListener::bind(listen_address).await?;
+                info!("✅ Successfully bound TCP listener on {}:{}", address, port);
+
                 tokio::spawn(async move {
+                    info!("🚀 Starting axum HTTP server...");
                     // Health check is already active from creation
                     if let Err(e) = axum::serve(tcp_listener, router)
                         .with_graceful_shutdown(shutdown_signal())
@@ -221,7 +237,9 @@ impl Starting {
                         // This can never really happen
                         error!("Failed to start MCP server: {e:?}");
                     }
+                    info!("🛑 Axum server has shutdown");
                 });
+                info!("✅ HTTP server task spawned successfully, server should be running in background");
             }
             Transport::SSE {
                 auth,
@@ -286,9 +304,144 @@ async fn health_endpoint(
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), StatusCode> {
     let query = params.keys().next().map(|k| k.as_str());
-    let (health, status_code) = health_check.get_health_state(query);
+    let (health, status_code) = health_check.get_health_state(query).await;
 
     trace!(?health, query = ?query, "health check");
 
     Ok((status_code, Json(json!(health))))
+}
+
+/// Debug endpoint handler - shows internal server state
+async fn debug_endpoint(
+    axum::extract::State(running): axum::extract::State<Running>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    debug!("Debug endpoint called");
+
+    // Gather session information
+    let sessions_info = if let Some(session_manager) = &running.session_manager {
+        match session_manager.list_sessions().await {
+            Ok(session_ids) => {
+                let mut sessions_data = Vec::new();
+                for session_id in session_ids.iter() {
+                    if let Ok(Some(user_info)) = session_manager.get_session_info(session_id).await {
+                        sessions_data.push(json!({
+                            "session_id": session_id,
+                            "user_info": {
+                                "sub": user_info.sub,
+                                "email": user_info.email,
+                                "name": user_info.name,
+                                "groups": user_info.groups,
+                                "permissions": user_info.permissions,
+                            },
+                            "is_authenticated": session_manager.is_authenticated(session_id).await.unwrap_or(false),
+                        }));
+                    }
+                }
+                Some(json!({
+                    "active_count": session_ids.len(),
+                    "sessions": sessions_data
+                }))
+            },
+            Err(e) => {
+                warn!("Failed to list sessions: {}", e);
+                Some(json!({
+                    "error": format!("Failed to list sessions: {}", e)
+                }))
+            }
+        }
+    } else {
+        None
+    };
+
+    // Gather Auth0 token info (Phase 1)
+    let auth0_phase1_info = if let Some(provider) = &running.auth0_token_provider {
+        let mut token_data = provider.lock().await;
+        Some(json!({
+            "enabled": true,
+            "has_token": token_data.get_bearer().await.is_ok(),
+        }))
+    } else {
+        None
+    };
+
+    // Gather device flow info (Phase 2)
+    let device_flow_info = if running.device_flow_manager.is_some() {
+        Some(json!({
+            "enabled": true,
+        }))
+    } else {
+        None
+    };
+
+    // Gather peer/connection information
+    let peers = running.peers.read().await;
+    let connections_info = json!({
+        "active_peers": peers.len(),
+        "peers": peers.iter().enumerate().map(|(i, _peer)| {
+            json!({
+                "index": i,
+                "type": "mcp_peer"
+            })
+        }).collect::<Vec<_>>()
+    });
+
+    // Gather operations info
+    let operations = running.operations.lock().await;
+    let operations_info = json!({
+        "count": operations.len(),
+        "names": operations.iter().map(|op| &op.as_ref().name).collect::<Vec<_>>()
+    });
+
+    // Gather role-based routing info
+    let role_info = if let Some(role_config) = &running.role_config {
+        Some(json!({
+            "enabled": true,
+            "base_url": role_config.graphql_base_url,
+            "available_roles": role_config.available_roles,
+        }))
+    } else {
+        None
+    };
+
+    // Gather schema cache info
+    let schema_cache_info = if let Some(cache) = &running.schema_cache {
+        let cached_roles = cache.available_roles();
+        Some(json!({
+            "enabled": true,
+            "cached_roles": cached_roles,
+        }))
+    } else {
+        None
+    };
+
+    // Build debug response
+    let debug_info = json!({
+        "server": {
+            "version": env!("CARGO_PKG_VERSION"),
+            "endpoint": running.endpoint.to_string(),
+            "mutation_mode": format!("{:?}", running.mutation_mode),
+        },
+        "authentication": {
+            "phase1_auth0": auth0_phase1_info,
+            "phase2_auth0": {
+                "sessions": sessions_info,
+                "device_flow": device_flow_info,
+            },
+        },
+        "connections": connections_info,
+        "operations": operations_info,
+        "role_routing": role_info,
+        "schema_cache": schema_cache_info,
+        "features": {
+            "health_check": running.health_check.is_some(),
+            "test_manager": running.test_manager.is_some(),
+            "execute_tool": running.execute_tool.is_some(),
+            "introspect_tool": running.introspect_tool.is_some(),
+            "search_tool": running.search_tool.is_some(),
+            "explorer_tool": running.explorer_tool.is_some(),
+            "validate_tool": running.validate_tool.is_some(),
+        },
+    });
+
+    Ok(Json(debug_info))
 }

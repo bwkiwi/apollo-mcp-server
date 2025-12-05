@@ -92,7 +92,7 @@ impl Default for SchemaCache {
 }
 
 /// Fetch a GraphQL schema from an endpoint using introspection
-async fn fetch_schema_from_graphql(endpoint: &str) -> Result<Valid<Schema>, SchemaLoadError> {
+pub async fn fetch_schema_from_graphql(endpoint: &str) -> Result<Valid<Schema>, SchemaLoadError> {
     info!("🔍 Executing introspection query against {}", endpoint);
 
     let client = Client::builder()
@@ -301,7 +301,10 @@ fn introspection_to_sdl(schema_data: &serde_json::Value) -> Result<String, Schem
                             sdl.push_str("}\n\n");
                         }
                         "SCALAR" => {
-                            sdl.push_str(&format!("scalar {}\n\n", type_name));
+                            // Skip built-in scalars
+                            if !matches!(type_name, "String" | "Int" | "Float" | "Boolean" | "ID") {
+                                sdl.push_str(&format!("scalar {}\n\n", type_name));
+                            }
                         }
                         "ENUM" => {
                             sdl.push_str(&format!("enum {} {{\n", type_name));

@@ -151,6 +151,25 @@ async fn main() -> anyhow::Result<()> {
     let schema_source = match config.schema {
         runtime::SchemaSource::Local { path } => SchemaSource::File { path, watch: true },
         runtime::SchemaSource::Uplink => SchemaSource::Registry(config.graphos.uplink_config()?),
+        runtime::SchemaSource::Introspection => {
+            // Fetch schema from GraphQL backend via introspection
+            info!("Fetching schema from GraphQL backend via introspection");
+            let schema = apollo_mcp_server::schema_loader::fetch_schema_from_graphql(
+                config.endpoint.as_str()
+            ).await
+                .map_err(|e| anyhow::anyhow!("Failed to fetch schema from backend: {}", e))?;
+
+            // Write schema to temporary file
+            let temp_dir = std::env::temp_dir();
+            let schema_path = temp_dir.join("apollo-mcp-schema-introspected.graphql");
+
+            // Convert schema to SDL string
+            let sdl = schema.to_string();
+            fs::write(&schema_path, sdl)?;
+
+            info!("Schema fetched and written to {:?}", schema_path);
+            SchemaSource::File { path: schema_path, watch: false }
+        },
     };
 
     let operation_source = match config.operations {

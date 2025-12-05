@@ -13,10 +13,11 @@ use std::{
 };
 
 use axum::http::StatusCode;
+use reqwest::Client;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// Health status enumeration
 #[derive(Debug, Serialize)]
@@ -30,6 +31,16 @@ pub enum HealthStatus {
 #[derive(Debug, Serialize)]
 pub struct Health {
     status: HealthStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    backend: Option<BackendHealth>,
+}
+
+/// Backend connectivity health
+#[derive(Debug, Serialize)]
+pub struct BackendHealth {
+    status: HealthStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
 }
 
 /// Configuration options for the readiness health interval sub-component.
@@ -95,6 +106,9 @@ pub struct HealthCheckConfig {
 
     /// Optionally specify readiness configuration
     pub readiness: ReadinessConfig,
+
+    /// GraphQL endpoint to check for backend connectivity (optional)
+    pub graphql_endpoint: Option<String>,
 }
 
 impl Default for HealthCheckConfig {
@@ -103,6 +117,7 @@ impl Default for HealthCheckConfig {
             enabled: false,
             path: "/health".to_string(),
             readiness: Default::default(),
+            graphql_endpoint: None,
         }
     }
 }
@@ -169,20 +184,77 @@ impl HealthCheck {
         &self.config
     }
 
-    pub fn get_health_state(&self, query: Option<&str>) -> (Health, StatusCode) {
+    /// Check GraphQL backend connectivity
+    async fn check_backend(&self) -> Option<BackendHealth> {
+        let endpoint = self.config.graphql_endpoint.as_ref()?;
+
+        // Simple introspection query to check backend connectivity
+        let introspection_query = serde_json::json!({
+            "query": "{ __schema { queryType { name } } }"
+        });
+
+        let client = match Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build() {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!("Failed to create HTTP client for backend check: {}", e);
+                    return Some(BackendHealth {
+                        status: HealthStatus::Down,
+                        message: Some(format!("Client error: {}", e)),
+                    });
+                }
+            };
+
+        match client.post(endpoint)
+            .json(&introspection_query)
+            .send()
+            .await {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        Some(BackendHealth {
+                            status: HealthStatus::Up,
+                            message: None,
+                        })
+                    } else {
+                        Some(BackendHealth {
+                            status: HealthStatus::Down,
+                            message: Some(format!("HTTP {}", response.status())),
+                        })
+                    }
+                },
+                Err(e) => {
+                    warn!("Backend connectivity check failed: {}", e);
+                    Some(BackendHealth {
+                        status: HealthStatus::Down,
+                        message: Some(e.to_string()),
+                    })
+                }
+            }
+    }
+
+    pub async fn get_health_state(&self, query: Option<&str>) -> (Health, StatusCode) {
         let mut status_code = StatusCode::OK;
+
+        // Check backend connectivity if configured
+        let backend = self.check_backend().await;
+
+        // If backend is down, overall status should reflect that
+        let backend_down = backend.as_ref()
+            .map(|b| matches!(b.status, HealthStatus::Down))
+            .unwrap_or(false);
 
         let health = if let Some(query) = query {
             let query_upper = query.to_ascii_uppercase();
 
             if query_upper.starts_with("READY") {
-                let status = if self.ready.load(Ordering::SeqCst) {
+                let status = if self.ready.load(Ordering::SeqCst) && !backend_down {
                     HealthStatus::Up
                 } else {
                     status_code = StatusCode::SERVICE_UNAVAILABLE;
                     HealthStatus::Down
                 };
-                Health { status }
+                Health { status, backend }
             } else if query_upper.starts_with("LIVE") {
                 let status = if self.live.load(Ordering::SeqCst) {
                     HealthStatus::Up
@@ -190,16 +262,24 @@ impl HealthCheck {
                     status_code = StatusCode::SERVICE_UNAVAILABLE;
                     HealthStatus::Down
                 };
-                Health { status }
+                Health { status, backend }
             } else {
-                Health {
-                    status: HealthStatus::Up,
-                }
+                let status = if backend_down {
+                    status_code = StatusCode::SERVICE_UNAVAILABLE;
+                    HealthStatus::Down
+                } else {
+                    HealthStatus::Up
+                };
+                Health { status, backend }
             }
         } else {
-            Health {
-                status: HealthStatus::Up,
-            }
+            let status = if backend_down {
+                status_code = StatusCode::SERVICE_UNAVAILABLE;
+                HealthStatus::Down
+            } else {
+                HealthStatus::Up
+            };
+            Health { status, backend }
         };
 
         (health, status_code)
