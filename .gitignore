@@ -25,3 +25,13 @@ target/
 
 # Generated e2e test configs
 e2e/**/config.generated.yaml
+
+# WSL Zone.Identifier files
+*:Zone.Identifier
+
+# Environment files
+.env
+!.env.example
+
+# Log files
+logs/
