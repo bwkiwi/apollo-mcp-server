@@ -1,0 +1,25 @@
+endpoint: https://your-graphql-api.com/graphql
+
+auth0:
+  domain: your-tenant.auth0.com
+  client_id: your_client_id
+  audience: https://your-graphql-api.com/graphql
+  refresh_token: your_refresh_token
+
+schema:
+  type: local
+  path: /data/schema.graphql
+
+operations:
+  type: local
+  paths:
+    - /data/operations
+
+introspection:
+  execute:
+    enabled: true
+
+transport:
+  type: streamable_http
+  address: 0.0.0.0
+  port: 5000

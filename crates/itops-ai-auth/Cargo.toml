@@ -1,0 +1,16 @@
+[package]
+name = "itops-ai-auth"
+version.workspace = true
+authors.workspace = true
+edition = "2024"
+license-file = "../../LICENSE"
+
+[dependencies]
+anyhow = "1.0.98"
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

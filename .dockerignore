@@ -1,0 +1,10 @@
+target/
+.git/
+.github/
+docs/
+graphql/
+nix/
+*.md
+*.nix
+flake.lock
+test-auth0-config.yaml

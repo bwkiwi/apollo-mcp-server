@@ -1,0 +1,326 @@
+---
+title: Auth0 Extension for Outbound GraphQL Authentication
+---
+
+<ExperimentalFeature>
+
+This feature is [experimental](/graphos/resources/feature-launch-stages#experimental). Your questions and feedback are highly valued—don't hesitate to get in touch with your Apollo contact or post in the [Apollo Community MCP Server Category](https://community.apollographql.com/c/mcp-server/41).
+
+</ExperimentalFeature>
+
+The Apollo MCP Server now supports Auth0 authentication for outbound GraphQL requests. This extension automatically manages Auth0 access tokens, refreshing them as needed, and injects them into all GraphQL requests made by the MCP server to your backend API.
+
+## Overview
+
+This extension differs from the standard [Authorization guide](/apollo-mcp-server/guides/auth) in that it handles authentication for **outbound** requests from the MCP server to your GraphQL API, rather than inbound authentication from MCP clients to the server.
+
+### Key Features
+
+- **Automatic Token Management**: Access tokens are automatically refreshed before expiration
+- **Server-Side Authentication**: No need to forward auth headers from MCP clients
+- **Thread-Safe**: Safe for concurrent GraphQL operations
+- **Error Handling**: Proper error responses when authentication fails
+- **Optional**: Completely backward compatible with existing configurations
+
+## Use Cases
+
+This extension is ideal when:
+
+- Your GraphQL API requires Auth0 JWT authentication
+- You want to centralize authentication in the MCP server rather than requiring each MCP client to handle it
+- You have machine-to-machine authentication requirements
+- You need to ensure all GraphQL operations are authenticated consistently
+
+## Prerequisites
+
+1. An Auth0 account and tenant
+2. A configured Auth0 Application (Machine to Machine or SPA)
+3. A GraphQL API configured to accept Auth0 JWTs
+4. A valid Auth0 refresh token
+
+## Configuration
+
+### Step 1: Set up Auth0 Application
+
+1. In your Auth0 dashboard, create or configure an application:
+   - For server-to-server: Create a **Machine to Machine** application
+   - For user delegation: Create a **Single Page Application**
+
+2. Configure the application settings:
+   - Note your **Domain** (e.g., `your-tenant.auth0.com`)
+   - Note your **Client ID**
+   - Set your **Audience** to match your GraphQL API identifier
+
+3. Obtain a refresh token:
+   - For Machine to Machine: Use the Client Credentials flow to get an initial access token
+   - For user delegation: Complete an authorization flow with `offline_access` scope to get a refresh token
+
+### Step 2: Configure Your GraphQL API
+
+Ensure your GraphQL API is configured to validate Auth0 JWTs:
+
+```yaml title="Example GraphQL API configuration (using Apollo Router)"
+authentication:
+  router:
+    jwt:
+      jwks:
+        - url: https://your-tenant.auth0.com/.well-known/jwks.json
+      header_name: authorization
+      header_value_prefix: Bearer
+authorization:
+  require_authentication: true
+```
+
+### Step 3: Configure Apollo MCP Server
+
+Add the `auth0` configuration to your MCP server config:
+
+```yaml title="config.yaml"
+endpoint: https://your-api.example.com/graphql
+
+auth0:
+  domain: your-tenant.auth0.com
+  client_id: your_client_id
+  audience: https://your-api.example.com/graphql
+  refresh_token: your_refresh_token
+
+schema:
+  source: local
+  path: ./schema.graphql
+
+operations:
+  source: local
+  paths:
+    - ./operations/
+
+transport:
+  type: streamable_http
+  address: 127.0.0.1
+  port: 5000
+```
+
+### Configuration Options
+
+| Option | Description | Required |
+|--------|-------------|----------|
+| `domain` | Your Auth0 tenant domain (e.g., `your-tenant.auth0.com`) | Yes |
+| `client_id` | Your Auth0 application client ID | Yes |
+| `audience` | The audience identifier for your GraphQL API | Yes |
+| `refresh_token` | A valid refresh token for obtaining access tokens | Yes |
+
+### Environment Variables
+
+You can also configure Auth0 settings using environment variables:
+
+```bash
+export APOLLO_MCP_AUTH0__DOMAIN=your-tenant.auth0.com
+export APOLLO_MCP_AUTH0__CLIENT_ID=your_client_id
+export APOLLO_MCP_AUTH0__AUDIENCE=https://your-api.example.com/graphql
+export APOLLO_MCP_AUTH0__REFRESH_TOKEN=your_refresh_token
+```
+
+## Token Management
+
+### Automatic Refresh
+
+The extension automatically handles token refresh:
+
+- Tokens are refreshed 5 minutes before expiration
+- New refresh tokens are stored if provided by Auth0
+- Failed refresh attempts result in authentication errors
+
+### Token Lifecycle
+
+1. **Initial Request**: If no cached token exists, the extension immediately refreshes
+2. **Subsequent Requests**: Cached tokens are used if valid
+3. **Near Expiration**: Tokens are refreshed proactively 
+4. **Refresh Failure**: Proper error responses are returned to the MCP client
+
+## Example: Complete Setup
+
+Here's a complete example configuration for a weather API:
+
+```yaml title="weather-auth0-config.yaml"
+# GraphQL API endpoint that requires Auth0 authentication
+endpoint: https://weather-api.example.com/graphql
+
+# Auth0 configuration for outbound authentication
+auth0:
+  domain: weather-app.auth0.com
+  client_id: abc123def456ghi789
+  audience: https://weather-api.example.com/graphql
+  refresh_token: your_refresh_token_here
+
+# Schema and operations
+schema:
+  source: local
+  path: ./weather-schema.graphql
+
+operations:
+  source: local
+  paths:
+    - ./weather-operations/
+
+# Enable introspection tools
+introspection:
+  execute:
+    enabled: true
+  introspect:
+    enabled: true
+  search:
+    enabled: true
+  validate:
+    enabled: true
+
+# Server transport
+transport:
+  type: streamable_http
+  address: 0.0.0.0
+  port: 5000
+
+# Optional: Add custom headers
+headers:
+  User-Agent: Apollo-MCP-Server/1.0
+```
+
+## Running with Docker
+
+When using the Docker container, you can pass Auth0 configuration via environment variables:
+
+```bash
+docker run -it --rm \
+  --name apollo-mcp-server-auth0 \
+  -p 5000:5000 \
+  -e APOLLO_MCP_ENDPOINT=https://your-api.example.com/graphql \
+  -e APOLLO_MCP_AUTH0__DOMAIN=your-tenant.auth0.com \
+  -e APOLLO_MCP_AUTH0__CLIENT_ID=your_client_id \
+  -e APOLLO_MCP_AUTH0__AUDIENCE=https://your-api.example.com/graphql \
+  -e APOLLO_MCP_AUTH0__REFRESH_TOKEN=your_refresh_token \
+  -v $PWD/schema.graphql:/data/schema.graphql \
+  -v $PWD/operations:/data/operations \
+  ghcr.io/apollographql/apollo-mcp-server:latest
+```
+
+Or mount a configuration file:
+
+```bash
+docker run -it --rm \
+  --name apollo-mcp-server-auth0 \
+  -p 5000:5000 \
+  -v $PWD/auth0-config.yaml:/data/config.yaml \
+  -v $PWD/schema.graphql:/data/schema.graphql \
+  -v $PWD/operations:/data/operations \
+  ghcr.io/apollographql/apollo-mcp-server:latest \
+  /data/config.yaml
+```
+
+## Testing with MCP Inspector
+
+1. Start your MCP server with Auth0 configuration:
+
+```bash
+apollo-mcp-server auth0-config.yaml
+```
+
+2. Open MCP Inspector:
+
+```bash
+npx @modelcontextprotocol/inspector
+```
+
+3. Connect using Streamable HTTP:
+   - **Transport Type**: `Streamable HTTP`
+   - **URL**: `http://127.0.0.1:5000/mcp`
+
+4. Test operations:
+   - Click **List Tools** to see available operations
+   - Execute tools - they should now include Auth0 authentication automatically
+
+## Monitoring and Debugging
+
+### Log Output
+
+The server logs Auth0 authentication activities:
+
+```
+INFO Apollo MCP Server v0.7.1 // (c) Apollo Graph, Inc. // Licensed under MIT
+DEBUG Adding Auth0 bearer token to GraphQL request
+DEBUG Successfully refreshed Auth0 access token, expires at: 2024-12-20T15:30:00Z
+```
+
+### Error Handling
+
+Authentication failures are logged and returned as proper MCP errors:
+
+```json
+{
+  "error": {
+    "code": -32603,
+    "message": "Auth0 authentication failed: invalid_grant - Refresh token is invalid"
+  }
+}
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### Token Refresh Failures
+
+- **Error**: `invalid_grant`
+  - **Solution**: Verify your refresh token is valid and hasn't expired
+  - **Solution**: Check that your Auth0 application allows the `offline_access` scope
+
+#### Wrong Audience
+
+- **Error**: `Invalid audience`
+  - **Solution**: Ensure the `audience` in your config matches your GraphQL API identifier
+  - **Solution**: Verify your Auth0 API configuration
+
+#### Connection Issues
+
+- **Error**: `Failed to send GraphQL request`
+  - **Solution**: Check that your GraphQL endpoint is correct and accessible
+  - **Solution**: Verify your GraphQL API is configured to accept Auth0 JWTs
+
+#### Invalid Client
+
+- **Error**: `invalid_client`
+  - **Solution**: Verify your `client_id` is correct
+  - **Solution**: Check that your Auth0 application is properly configured
+
+### Getting Help
+
+If you're still having issues:
+
+1. Check the [Apollo MCP Server GitHub issues](https://github.com/apollographql/apollo-mcp-server/issues)
+2. Join the [Apollo Community MCP Server Category](https://community.apollographql.com/c/mcp-server/41)
+3. Contact your Apollo representative for direct support
+
+## Security Considerations
+
+### Best Practices
+
+1. **Secure Refresh Token Storage**: Store refresh tokens securely and rotate them regularly
+2. **Environment Variables**: Use environment variables for sensitive configuration in production
+3. **Network Security**: Ensure all communication with Auth0 and your GraphQL API uses HTTPS
+4. **Token Rotation**: Implement refresh token rotation if supported by your Auth0 configuration
+5. **Monitoring**: Monitor authentication failures and token refresh patterns
+
+### Token Security
+
+- Refresh tokens are stored in memory only and are not persisted to disk
+- Access tokens are cached temporarily and automatically refreshed
+- All Auth0 communication uses HTTPS with certificate validation
+- Failed authentication attempts are logged for monitoring
+
+## Migration from Manual Authentication
+
+If you're currently handling authentication manually in your GraphQL operations or clients:
+
+1. **Remove manual auth headers**: The extension automatically adds the `Authorization` header
+2. **Update operations**: Remove any Auth0-specific logic from your GraphQL operations
+3. **Simplify client code**: MCP clients no longer need to handle authentication
+4. **Test thoroughly**: Verify all operations work with the new automated authentication
+
+This extension simplifies your authentication architecture by centralizing Auth0 token management in the MCP server, reducing complexity for both API developers and MCP client applications.
