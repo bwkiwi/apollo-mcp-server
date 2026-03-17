@@ -168,6 +168,8 @@ impl Starting {
             descriptions: self.config.descriptions,
             health_check: health_check.clone(),
             server_info: self.config.server_info.clone(),
+            #[cfg(feature = "itops-auth0")]
+            auth0_token_provider: self.config.auth0_token_provider.clone(),
         };
 
         match self.config.transport {
@@ -309,6 +311,8 @@ mod tests {
                 },
                 cors: Default::default(),
                 server_info: Default::default(),
+                #[cfg(feature = "itops-auth0")]
+                auth0_token_provider: None,
             },
             schema: Schema::parse_and_validate("type Query { hello: String }", "test.graphql")
                 .expect("Valid schema"),

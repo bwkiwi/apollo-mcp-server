@@ -1,10 +1,12 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use apollo_compiler::{Schema, validation::Valid};
 use apollo_federation::{ApiSchemaOptions, Supergraph};
 use apollo_mcp_registry::uplink::schema::{SchemaState, event::Event as SchemaEvent};
 use futures::{FutureExt as _, Stream, StreamExt as _, stream};
 use reqwest::header::HeaderMap;
+use tokio::sync::Mutex;
 use url::Url;
 
 use crate::{
@@ -64,6 +66,8 @@ struct Config {
     health_check: HealthCheckConfig,
     cors: CorsConfig,
     server_info: ServerInfoConfig,
+    #[cfg(feature = "itops-auth0")]
+    auth0_token_provider: Option<Arc<Mutex<itops_ai_auth::Auth0TokenProvider>>>,
 }
 
 impl StateMachine {
@@ -107,6 +111,8 @@ impl StateMachine {
                 health_check: server.health_check,
                 cors: server.cors,
                 server_info: server.server_info,
+                #[cfg(feature = "itops-auth0")]
+                auth0_token_provider: server.auth0_token_provider,
             },
         });
 
@@ -369,6 +375,8 @@ mod tests {
             descriptions: HashMap::new(),
             health_check: None,
             server_info: ServerInfoConfig::default(),
+            #[cfg(feature = "itops-auth0")]
+            auth0_token_provider: None,
         }
     }
 
@@ -408,6 +416,8 @@ mod tests {
             health_check: HealthCheckConfig::default(),
             cors: CorsConfig::default(),
             server_info: ServerInfoConfig::default(),
+            #[cfg(feature = "itops-auth0")]
+            auth0_token_provider: None,
         }
     }
 

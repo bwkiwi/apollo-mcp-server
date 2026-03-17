@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use apollo_compiler::{Schema, validation::Valid};
+#[cfg(feature = "itops-auth0")]
+use tokio::sync::Mutex;
 use opentelemetry::KeyValue;
 use reqwest::header::HeaderMap;
 use rmcp::ErrorData;
@@ -22,6 +24,8 @@ use serde_json::Value;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error};
+#[cfg(feature = "itops-auth0")]
+use tracing::warn;
 use url::Url;
 
 use crate::apps::app::AppTarget;
@@ -71,6 +75,8 @@ pub(super) struct Running {
     pub(super) descriptions: HashMap<String, String>,
     pub(super) health_check: Option<HealthCheck>,
     pub(super) server_info: ServerInfoConfig,
+    #[cfg(feature = "itops-auth0")]
+    pub(super) auth0_token_provider: Option<Arc<Mutex<itops_ai_auth::Auth0TokenProvider>>>,
 }
 
 impl Running {
@@ -79,6 +85,23 @@ impl Running {
     fn client_supports_output_schema(&self, protocol_version: Option<&ProtocolVersion>) -> bool {
         self.enable_output_schema
             && protocol_version.is_some_and(|v| *v >= ProtocolVersion::V_2025_06_18)
+    }
+
+    /// Inject Auth0 bearer token into request headers if configured.
+    #[cfg(feature = "itops-auth0")]
+    async fn inject_auth0_token(&self, headers: &mut HeaderMap) {
+        if let Some(provider) = &self.auth0_token_provider {
+            match provider.lock().await.get_bearer().await {
+                Ok(bearer) => {
+                    if let Ok(value) = reqwest::header::HeaderValue::from_str(&bearer) {
+                        headers.insert(reqwest::header::AUTHORIZATION, value);
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to get Auth0 bearer token: {e}");
+                }
+            }
+        }
     }
 
     /// Update a running server with a new schema.
@@ -327,7 +350,7 @@ impl Running {
         } else if tool_name == EXECUTE_TOOL_NAME
             && let Some(execute_tool) = &self.execute_tool
         {
-            let headers = if let Some(axum_parts) = extensions.get::<axum::http::request::Parts>() {
+            let mut headers = if let Some(axum_parts) = extensions.get::<axum::http::request::Parts>() {
                 build_request_headers(
                     &self.headers,
                     &self.forward_headers,
@@ -338,6 +361,9 @@ impl Running {
             } else {
                 self.headers.clone()
             };
+
+            #[cfg(feature = "itops-auth0")]
+            self.inject_auth0_token(&mut headers).await;
 
             execute_operation(
                 execute_tool,
@@ -356,7 +382,7 @@ impl Running {
                 ))])),
             }
         } else {
-            let headers = if let Some(axum_parts) = extensions.get::<axum::http::request::Parts>() {
+            let mut headers = if let Some(axum_parts) = extensions.get::<axum::http::request::Parts>() {
                 build_request_headers(
                     &self.headers,
                     &self.forward_headers,
@@ -367,6 +393,9 @@ impl Running {
             } else {
                 self.headers.clone()
             };
+
+            #[cfg(feature = "itops-auth0")]
+            self.inject_auth0_token(&mut headers).await;
 
             // Acquire the lock once: reused for scope check and execution.
             let ops = self.operations.read().await;

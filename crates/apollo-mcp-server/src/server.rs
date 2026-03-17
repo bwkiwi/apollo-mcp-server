@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
+use std::sync::Arc;
 
 use apollo_mcp_registry::uplink::schema::SchemaSource;
 use bon::bon;
 use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 use schemars::JsonSchema;
 use serde::Deserialize;
+use tokio::sync::Mutex;
 use url::Url;
 
 use crate::auth;
@@ -55,6 +57,8 @@ pub struct Server {
     health_check: HealthCheckConfig,
     cors: CorsConfig,
     server_info: ServerInfoConfig,
+    #[cfg(feature = "itops-auth0")]
+    auth0_token_provider: Option<Arc<Mutex<itops_ai_auth::Auth0TokenProvider>>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default, JsonSchema)]
@@ -136,6 +140,8 @@ impl Server {
         health_check: HealthCheckConfig,
         cors: CorsConfig,
         server_info: ServerInfoConfig,
+        #[cfg(feature = "itops-auth0")]
+        auth0_token_provider: Option<Arc<Mutex<itops_ai_auth::Auth0TokenProvider>>>,
     ) -> Self {
         let headers = {
             let mut headers = headers.clone();
@@ -173,6 +179,8 @@ impl Server {
             health_check,
             cors,
             server_info,
+            #[cfg(feature = "itops-auth0")]
+            auth0_token_provider,
         }
     }
 

@@ -3,6 +3,7 @@
 //! This module is only used by the main binary and provides helper code
 //! related to runtime configuration.
 
+mod auth0;
 mod config;
 mod endpoint;
 mod filtering_exporter;
@@ -17,6 +18,7 @@ pub mod telemetry;
 
 use std::path::Path;
 
+pub use auth0::Auth0Config;
 pub use config::Config;
 use figment::{
     Figment,

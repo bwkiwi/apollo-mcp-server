@@ -1,16 +1,16 @@
-// crates/.../auth0.rs
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
-use std::time::{Duration, SystemTime};
 use reqwest::Client;
+use serde::Deserialize;
+use std::time::{Duration, SystemTime};
+use tracing::{debug, error};
 
 #[derive(Clone)]
 pub struct Auth0TokenProvider {
     http: Client,
-    domain: String,          // "your-tenant.eu.auth0.com"
-    client_id: String,       // SPA/native/client creds, depending on your setup
-    audience: String,        // "https://api.example.com/graphql"
-    refresh_token: String,   // obtained during initial login (offline_access)
+    domain: String,
+    client_id: String,
+    audience: String,
+    refresh_token: String,
     access_token: Option<String>,
     expires_at: Option<SystemTime>,
 }
@@ -19,16 +19,24 @@ pub struct Auth0TokenProvider {
 struct TokenRes {
     access_token: String,
     expires_in: u64,
-    token_type: String,
-    // id_token, scope etc. optional
+    // id_token, scope, token_type etc. optional
 }
 
 impl Auth0TokenProvider {
-    pub fn new(domain: String, client_id: String, audience: String, refresh_token: String) -> Self {
+    pub fn new(
+        domain: String,
+        client_id: String,
+        audience: String,
+        refresh_token: String,
+    ) -> Self {
         Self {
             http: Client::new(),
-            domain, client_id, audience, refresh_token,
-            access_token: None, expires_at: None,
+            domain,
+            client_id,
+            audience,
+            refresh_token,
+            access_token: None,
+            expires_at: None,
         }
     }
 
@@ -41,20 +49,27 @@ impl Auth0TokenProvider {
           "audience": self.audience
         });
 
-        let res = self.http
+        debug!("Refreshing Auth0 token from {}", url);
+
+        let res = self
+            .http
             .post(&url)
             .json(&body)
-            .send().await
+            .send()
+            .await
             .context("auth0 token request failed")?;
 
         if !res.status().is_success() {
             let t = res.text().await.unwrap_or_default();
+            error!("Auth0 token exchange failed: {}", t);
             anyhow::bail!("auth0 token exchange failed: {}", t);
         }
 
         let tr: TokenRes = res.json().await.context("parse token response")?;
         self.access_token = Some(tr.access_token);
-        self.expires_at = Some(SystemTime::now() + Duration::from_secs(tr.expires_in.saturating_sub(30))); // small skew
+        self.expires_at =
+            Some(SystemTime::now() + Duration::from_secs(tr.expires_in.saturating_sub(30)));
+        debug!("Auth0 token refreshed successfully");
         Ok(())
     }
 
@@ -63,7 +78,12 @@ impl Auth0TokenProvider {
             None => true,
             Some(t) => SystemTime::now() >= t,
         };
-        if needs_refresh { self.refresh().await?; }
-        Ok(format!("Bearer {}", self.access_token.as_ref().unwrap()))
+        if needs_refresh {
+            self.refresh().await?;
+        }
+        self.access_token
+            .as_ref()
+            .map(|token| format!("Bearer {token}"))
+            .context("no access token available after refresh")
     }
 }

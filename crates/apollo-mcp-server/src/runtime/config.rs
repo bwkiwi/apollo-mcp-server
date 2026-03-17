@@ -11,7 +11,7 @@ use url::Url;
 use apollo_mcp_server::server_info::ServerInfoConfig;
 
 use super::{
-    OperationSource, SchemaSource, endpoint::Endpoint, graphos::GraphOSConfig,
+    Auth0Config, OperationSource, SchemaSource, endpoint::Endpoint, graphos::GraphOSConfig,
     introspection::Introspection, logging::Logging, overrides::Overrides, telemetry::Telemetry,
 };
 
@@ -32,6 +32,9 @@ pub struct Config {
     /// The target GraphQL endpoint
     #[schemars(schema_with = "Url::json_schema")]
     pub endpoint: Endpoint,
+
+    /// Auth0 configuration for outbound GraphQL authentication
+    pub auth0: Option<Auth0Config>,
 
     /// Apollo-specific credential overrides
     pub graphos: GraphOSConfig,

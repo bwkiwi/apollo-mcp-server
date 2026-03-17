@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use apollo_mcp_registry::platform_api::operation_collections::collection_poller::CollectionSource;
 use apollo_mcp_registry::uplink::persisted_queries::ManifestSource;
@@ -11,6 +12,7 @@ use clap::Parser;
 use clap::builder::Styles;
 use clap::builder::styling::{AnsiColor, Effects};
 use runtime::IdOrDefault;
+use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
 mod runtime;
@@ -109,6 +111,18 @@ async fn main() -> anyhow::Result<()> {
         .then(|| config.graphos.graph_ref())
         .transpose()?;
 
+    // Create Auth0 token provider if configured
+    #[cfg(feature = "itops-auth0")]
+    let auth0_token_provider = config.auth0.as_ref().map(|auth0| {
+        info!("Auth0 token provider configured for domain: {}", auth0.domain);
+        Arc::new(Mutex::new(itops_ai_auth::Auth0TokenProvider::new(
+            auth0.domain.clone(),
+            auth0.client_id.clone(),
+            auth0.audience.clone(),
+            auth0.refresh_token.clone(),
+        )))
+    });
+
     let transport = config.transport.clone();
 
     Ok(Server::builder()
@@ -156,6 +170,12 @@ async fn main() -> anyhow::Result<()> {
         .health_check(config.health_check)
         .cors(config.cors)
         .server_info(config.server_info)
+        .maybe_auth0_token_provider({
+            #[cfg(feature = "itops-auth0")]
+            { auth0_token_provider }
+            #[cfg(not(feature = "itops-auth0"))]
+            { None::<Arc<Mutex<()>>> }
+        })
         .build()
         .start()
         .await?)

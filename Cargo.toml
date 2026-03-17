@@ -4,6 +4,7 @@ members = [
   "crates/apollo-mcp-server",
   "crates/apollo-mcp-registry",
   "crates/apollo-schema-index",
+  "crates/itops-ai-auth",
 ]
 
 [workspace.package]
