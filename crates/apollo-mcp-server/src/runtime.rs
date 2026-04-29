@@ -222,6 +222,7 @@ mod test {
                         fragment: None,
                     },
                 ),
+                auth0: None,
                 graphos: GraphOSConfig {
                     apollo_key: None,
                     apollo_graph_ref: None,
@@ -322,6 +323,12 @@ mod test {
                 },
                 schema: Uplink,
                 transport: Stdio,
+                custom_tools: CustomToolsConfig {
+                    enabled: false,
+                    backend_url: "",
+                    packages: [],
+                    timeout_ms: 0,
+                },
             }
             "#);
             Ok(())

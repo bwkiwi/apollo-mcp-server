@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use apollo_mcp_server::{
-    cors::CorsConfig, headers::ForwardHeaders, health::HealthCheckConfig, server::Transport,
+    cors::CorsConfig, custom_tools::CustomToolsConfig, headers::ForwardHeaders,
+    health::HealthCheckConfig, server::Transport,
 };
 use reqwest::header::HeaderMap;
 use schemars::JsonSchema;
@@ -72,6 +73,10 @@ pub struct Config {
 
     /// The type of server transport to use
     pub transport: Transport,
+
+    /// Custom tools from IT-Ops backend REST API
+    #[serde(default)]
+    pub custom_tools: CustomToolsConfig,
 }
 
 mod parsers {

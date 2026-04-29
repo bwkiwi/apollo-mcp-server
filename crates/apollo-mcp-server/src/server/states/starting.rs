@@ -16,6 +16,7 @@ use crate::operations::apply_description_override;
 use crate::server::states::telemetry::otel_context_middleware;
 use crate::{
     cors::CorsConfig,
+    custom_tools::CustomTools,
     errors::ServerError,
     explorer::Explorer,
     health::HealthCheck,
@@ -135,6 +136,10 @@ impl Starting {
 
         let explorer_tool = self.config.explorer_graph_ref.map(Explorer::new);
 
+        // Discover custom tools from backend REST API
+        let custom_tools =
+            CustomTools::discover(&self.config.custom_tools, &self.config.headers).await;
+
         let cancellation_token = CancellationToken::new();
 
         // Create health checks only when StreamableHttp transport is enabled.
@@ -170,6 +175,7 @@ impl Starting {
             server_info: self.config.server_info.clone(),
             #[cfg(feature = "itops-auth0")]
             auth0_token_provider: self.config.auth0_token_provider.clone(),
+            custom_tools,
         };
 
         match self.config.transport {
@@ -313,6 +319,7 @@ mod tests {
                 server_info: Default::default(),
                 #[cfg(feature = "itops-auth0")]
                 auth0_token_provider: None,
+                custom_tools: Default::default(),
             },
             schema: Schema::parse_and_validate("type Query { hello: String }", "test.graphql")
                 .expect("Valid schema"),

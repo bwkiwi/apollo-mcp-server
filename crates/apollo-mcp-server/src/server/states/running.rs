@@ -31,6 +31,7 @@ use url::Url;
 use crate::apps::app::AppTarget;
 use crate::apps::resource::{attach_resource_mime_type, get_app_resource};
 use crate::apps::tool::{attach_tool_metadata, find_and_execute_app_tool, make_tool_private};
+use crate::custom_tools::CustomTools;
 use crate::generated::telemetry::{TelemetryAttribute, TelemetryMetric};
 use crate::meter;
 use crate::operations::{execute_operation, find_and_execute_operation};
@@ -77,6 +78,7 @@ pub(super) struct Running {
     pub(super) server_info: ServerInfoConfig,
     #[cfg(feature = "itops-auth0")]
     pub(super) auth0_token_provider: Option<Arc<Mutex<itops_ai_auth::Auth0TokenProvider>>>,
+    pub(super) custom_tools: Option<CustomTools>,
 }
 
 impl Running {
@@ -295,6 +297,12 @@ impl Running {
                     .chain(self.search_tool.as_ref().iter().map(|e| e.tool.clone()))
                     .chain(self.explorer_tool.as_ref().iter().map(|e| e.tool.clone()))
                     .chain(self.validate_tool.as_ref().iter().map(|e| e.tool.clone()))
+                    .chain(
+                        self.custom_tools
+                            .as_ref()
+                            .into_iter()
+                            .flat_map(|ct| ct.tools()),
+                    )
                     .collect(),
                 meta: None,
             }
@@ -404,6 +412,24 @@ impl Running {
                 if let Some(res) = find_and_execute_app_tool(
                     &self.apps,
                     app_param,
+                    &tool_name,
+                    &headers,
+                    request.arguments.as_ref(),
+                    &self.endpoint,
+                )
+                .await
+                {
+                    res
+                } else {
+                    Err(tool_not_found(&tool_name))
+                }
+            } else if let Some(custom_tools) = &self.custom_tools {
+                if custom_tools.handles(&tool_name) {
+                    custom_tools
+                        .execute(&tool_name, request.arguments.as_ref(), &headers)
+                        .await
+                } else if let Some(res) = find_and_execute_operation(
+                    &ops,
                     &tool_name,
                     &headers,
                     request.arguments.as_ref(),
@@ -690,6 +716,9 @@ mod tests {
             descriptions: HashMap::new(),
             health_check: None,
             server_info: ServerInfoConfig::default(),
+            #[cfg(feature = "itops-auth0")]
+            auth0_token_provider: None,
+            custom_tools: None,
         }
     }
 
@@ -2156,6 +2185,9 @@ mod integration_tests {
                 descriptions: HashMap::new(),
                 health_check: None,
                 server_info: Default::default(),
+                #[cfg(feature = "itops-auth0")]
+                auth0_token_provider: None,
+                custom_tools: None,
             }
         }
 
@@ -2381,6 +2413,9 @@ mod integration_tests {
                 descriptions: HashMap::new(),
                 health_check: None,
                 server_info: Default::default(),
+                #[cfg(feature = "itops-auth0")]
+                auth0_token_provider: None,
+                custom_tools: None,
             }
         }
 
@@ -2609,6 +2644,9 @@ mod integration_tests {
                 descriptions: HashMap::new(),
                 health_check: None,
                 server_info: Default::default(),
+                #[cfg(feature = "itops-auth0")]
+                auth0_token_provider: None,
+                custom_tools: None,
             }
         }
 

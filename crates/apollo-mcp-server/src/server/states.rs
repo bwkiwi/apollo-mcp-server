@@ -12,6 +12,7 @@ use url::Url;
 use crate::{
     cors::CorsConfig,
     custom_scalar_map::CustomScalarMap,
+    custom_tools::CustomToolsConfig,
     errors::{OperationError, ServerError},
     headers::ForwardHeaders,
     health::HealthCheckConfig,
@@ -68,6 +69,7 @@ struct Config {
     server_info: ServerInfoConfig,
     #[cfg(feature = "itops-auth0")]
     auth0_token_provider: Option<Arc<Mutex<itops_ai_auth::Auth0TokenProvider>>>,
+    custom_tools: CustomToolsConfig,
 }
 
 impl StateMachine {
@@ -113,6 +115,7 @@ impl StateMachine {
                 server_info: server.server_info,
                 #[cfg(feature = "itops-auth0")]
                 auth0_token_provider: server.auth0_token_provider,
+                custom_tools: server.custom_tools,
             },
         });
 
@@ -377,6 +380,7 @@ mod tests {
             server_info: ServerInfoConfig::default(),
             #[cfg(feature = "itops-auth0")]
             auth0_token_provider: None,
+            custom_tools: None,
         }
     }
 
@@ -418,6 +422,7 @@ mod tests {
             server_info: ServerInfoConfig::default(),
             #[cfg(feature = "itops-auth0")]
             auth0_token_provider: None,
+            custom_tools: Default::default(),
         }
     }
 

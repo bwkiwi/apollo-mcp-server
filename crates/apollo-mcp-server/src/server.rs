@@ -13,6 +13,7 @@ use url::Url;
 use crate::auth;
 use crate::cors::CorsConfig;
 use crate::custom_scalar_map::CustomScalarMap;
+use crate::custom_tools::CustomToolsConfig;
 use crate::errors::ServerError;
 use crate::event::Event as ServerEvent;
 use crate::headers::ForwardHeaders;
@@ -59,6 +60,7 @@ pub struct Server {
     server_info: ServerInfoConfig,
     #[cfg(feature = "itops-auth0")]
     auth0_token_provider: Option<Arc<Mutex<itops_ai_auth::Auth0TokenProvider>>>,
+    custom_tools: CustomToolsConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Default, JsonSchema)]
@@ -142,6 +144,7 @@ impl Server {
         server_info: ServerInfoConfig,
         #[cfg(feature = "itops-auth0")]
         auth0_token_provider: Option<Arc<Mutex<itops_ai_auth::Auth0TokenProvider>>>,
+        #[builder(default)] custom_tools: CustomToolsConfig,
     ) -> Self {
         let headers = {
             let mut headers = headers.clone();
@@ -181,6 +184,7 @@ impl Server {
             server_info,
             #[cfg(feature = "itops-auth0")]
             auth0_token_provider,
+            custom_tools,
         }
     }
 

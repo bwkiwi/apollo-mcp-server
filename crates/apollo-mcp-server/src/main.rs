@@ -176,6 +176,7 @@ async fn main() -> anyhow::Result<()> {
             #[cfg(not(feature = "itops-auth0"))]
             { None::<Arc<Mutex<()>>> }
         })
+        .custom_tools(config.custom_tools)
         .build()
         .start()
         .await?)
