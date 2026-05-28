@@ -1,5 +1,13 @@
 # Multi-stage Docker build for Apollo MCP Server with Auth0 Phase 2 support
-FROM rust:1.83-bookworm AS builder
+#
+# 260934 #57: base must be >= 1.85 — every crate declares `edition = "2024"`
+# (see crates/*/Cargo.toml), which Rust 1.83 cannot compile ("feature
+# `edition2024` is required"). The previous `rust:1.83-bookworm` pin was the
+# reason monovandi/itopsai-mcp couldn't publish. The `rust:1-bookworm` tag
+# tracks the latest stable 1.x, matching this repo's rust-toolchain.toml
+# (`channel = "stable"`) so the base image and the in-repo toolchain stay in
+# lockstep and a future edition bump can't re-break the image build.
+FROM rust:1-bookworm AS builder
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
