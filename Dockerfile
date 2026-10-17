@@ -21,8 +21,19 @@ RUN cargo build --release --package apollo-mcp-server --bin apollo-mcp-server
 # Using distroless/cc which includes glibc and CA certificates
 FROM gcr.io/distroless/cc-debian12
 
+# Image provenance (plan 261432): the itops build passes --build-arg VERSION=<build>
+# (and REVISION). Without these ARG declarations the values would be silently discarded.
+ARG VERSION=dev
+ARG REVISION=unknown
+
 # MCP Registry annotation for publishing
 LABEL io.modelcontextprotocol.server.name="io.github.apollographql/apollo-mcp-server"
+LABEL org.opencontainers.image.title="itopsai-mcp" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.source="https://github.com/bwkiwi/apollo-mcp-server" \
+      org.opencontainers.image.base.name="gcr.io/distroless/cc-debian12" \
+      org.opencontainers.image.description="Apollo MCP Server (upstream v2.0.0) for the itops platform"
 
 # Copy the binary
 COPY --from=builder /app/target/release/apollo-mcp-server /usr/local/bin/apollo-mcp-server
